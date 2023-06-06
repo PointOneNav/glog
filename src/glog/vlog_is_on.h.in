@@ -72,6 +72,44 @@
 # endif
 #endif
 
+// If desired, a source file may define either of these *_OVERRIDE macros to
+// manually override the default vmodule behavior. This allows a parent source
+// file to enable VLOG statements in an included header file without having to
+// enable them for _all_ source files that include that header.
+//
+// For example, in the following code, if --vmodule=foo=1 is specified, the
+// message will print when called from foo.cc, but not from bar.cc.
+//
+// Note that for this to work, the function must be declared static. Non-static
+// functions declared in a header (inline, template) will share a vlocal__
+// definition in the VLOG_IS_ON() macro below, and will respond to the vmodule
+// name used by the first source file to call the function.
+//
+// stuff.h
+//   #include <glog/logging.h>
+//   static void Test() { VLOG(1) << "Hello"; }
+//
+// foo.cc
+//   #define GOOGLE_VLOG_FILE_OVERRIDE __FILE__
+//   #include <glog/logging.h>
+//   #include "stuff.h"
+//   ...
+//   Test();
+//
+// bar.cc
+//   #define GOOGLE_VLOG_FILE_OVERRIDE __FILE__
+//   #include <glog/logging.h>
+//   #include "stuff.h"
+//   ...
+//   Test();
+#if defined(GOOGLE_VLOG_FILE_OVERRIDE)
+#   define GOOGLE_VLOG_FILE GOOGLE_VLOG_FILE_OVERRIDE
+#elif defined(GOOGLE_VLOG_MODULE_OVERRIDE)
+#   define GOOGLE_VLOG_FILE (GOOGLE_VLOG_MODULE_OVERRIDE ".cc")
+#else
+#   define GOOGLE_VLOG_FILE __FILE__
+#endif
+
 #if defined(__GNUC__)
 // We emit an anonymous static int* variable at every VLOG_IS_ON(n) site.
 // (Normally) the first time every VLOG_IS_ON(n) site is hit,
@@ -84,7 +122,7 @@
   ({ static @ac_google_namespace@::int32* vlocal__ = NULL;           \
      @ac_google_namespace@::int32 verbose_level__ = (verboselevel);                    \
      (vlocal__ == NULL ? @ac_google_namespace@::InitVLOG3__(&vlocal__, &FLAGS_v, \
-                        __FILE__, verbose_level__) : *vlocal__ >= verbose_level__); \
+                        GOOGLE_VLOG_FILE, verbose_level__) : *vlocal__ >= verbose_level__); \
   })
 #else
 // GNU extensions not available, so we do not support --vmodule.
